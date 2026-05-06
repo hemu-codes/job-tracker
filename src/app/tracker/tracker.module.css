@@ -432,3 +432,30 @@
 .pipelineItemTitle { color: var(--text-primary); font-weight: 500; }
 .pipelineItemCompany { color: var(--text-secondary); }
 .pipelineItemDate { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+
+.tabHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.tabDesc { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+
+.companyList { display: flex; flex-direction: column; gap: 10px; }
+.companyCard { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--border-radius-lg); overflow: hidden; }
+.companyHeader { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; cursor: pointer; gap: 10px; }
+.companyHeader:hover { background: var(--bg-hover); }
+.companyLeft { display: flex; align-items: center; gap: 12px; }
+.companyName { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.companyMeta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.companyActions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.expandIcon { font-size: 11px; color: var(--text-muted); }
+.companyBody { padding: 0 1.25rem 1rem; border-top: 1px solid var(--border); padding-top: 10px; }
+.companyWhyFit { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 6px; }
+.h1bNote { font-size: 11px; color: var(--green); background: var(--green-dim); padding: 3px 10px; border-radius: 999px; }
+
+.rolesSection { border-top: 1px solid var(--border); padding: 0.75rem 1.25rem; background: var(--bg-raised); }
+.rolesSectionTitle { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+.roleRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.roleRow:last-child { border-bottom: none; }
+.roleRowTracked { opacity: 0.7; }
+.roleRowLeft { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
+.roleRowActions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.tagVerify { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--amber-dim); color: var(--amber); }
+.sourceTag { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: var(--accent-dim); color: var(--accent); margin-left: 8px; }

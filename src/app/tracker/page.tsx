@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Role, TrackedApp, AppStatus } from "@/types";
+import { Role, TrackedApp, AppStatus, DiscoverCompany, DiscoverRole } from "@/types";
 import styles from "./tracker.module.css";
 
 const STATUS_META: Record<AppStatus, { label: string; color: string }> = {
@@ -13,11 +13,11 @@ const STATUS_META: Record<AppStatus, { label: string; color: string }> = {
   withdrawn:    { label: "Withdrawn",    color: "#5e5c6e" },
 };
 
-const ALL_INDUSTRIES = "All";
+const ALL = "All";
 
 function ScoreBadge({ score }: { score: number }) {
   const color = score >= 85 ? "var(--green)" : score >= 70 ? "var(--amber)" : "var(--text-secondary)";
-  const bg   = score >= 85 ? "var(--green-dim)" : score >= 70 ? "var(--amber-dim)" : "rgba(255,255,255,0.04)";
+  const bg = score >= 85 ? "var(--green-dim)" : score >= 70 ? "var(--amber-dim)" : "rgba(255,255,255,0.04)";
   return (
     <div className={styles.scoreBadge} style={{ background: bg, color }}>
       <span className={styles.scoreNum}>{score}</span>
@@ -35,103 +35,127 @@ function StatusPill({ status }: { status: AppStatus }) {
   );
 }
 
-export default function TrackerPage() {
-  const [tab, setTab] = useState<"discover" | "applications" | "pipeline">("discover");
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [lastFetched, setLastFetched] = useState<string | null>(null);
-  const [nextRefresh, setNextRefresh] = useState<string>("");
-  const [searchQ, setSearchQ] = useState("");
-  const [industryFilter, setIndustryFilter] = useState(ALL_INDUSTRIES);
-  const [sortBy, setSortBy] = useState<"score" | "industry" | "alpha">("score");
-  const [apps, setApps] = useState<TrackedApp[]>([]);
-  const [error, setError] = useState("");
+function Spinner({ large }: { large?: boolean }) {
+  return <div className={large ? styles.spinnerLg : styles.spinner} />;
+}
 
-  // Load apps from localStorage
+export default function TrackerPage() {
+  const [tab, setTab] = useState<"discover" | "live" | "applications" | "pipeline">("discover");
+
+  // Discover state
+  const [companies, setCompanies] = useState<DiscoverCompany[]>([]);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverError, setDiscoverError] = useState("");
+  const [discoverFetched, setDiscoverFetched] = useState<string | null>(null);
+  const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
+  const [discoverIndustry, setDiscoverIndustry] = useState(ALL);
+  const [discoverSearch, setDiscoverSearch] = useState("");
+
+  // Live state
+  const [liveRoles, setLiveRoles] = useState<Role[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState("");
+  const [liveFetched, setLiveFetched] = useState<string | null>(null);
+  const [liveIndustry, setLiveIndustry] = useState(ALL);
+  const [liveSearch, setLiveSearch] = useState("");
+
+  // Apps state
+  const [apps, setApps] = useState<TrackedApp[]>([]);
+
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("hemu_job_apps");
+      const saved = localStorage.getItem("hemu_job_apps_v2");
       if (saved) setApps(JSON.parse(saved));
     } catch {}
   }, []);
 
   const saveApps = (next: TrackedApp[]) => {
     setApps(next);
-    localStorage.setItem("hemu_job_apps", JSON.stringify(next));
+    localStorage.setItem("hemu_job_apps_v2", JSON.stringify(next));
   };
 
-  // Countdown timer
-  useEffect(() => {
-    if (!lastFetched) return;
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - new Date(lastFetched).getTime();
-      const remaining = Math.max(0, 6 * 60 * 60 * 1000 - elapsed);
-      const h = Math.floor(remaining / 3600000);
-      const m = Math.floor((remaining % 3600000) / 60000);
-      setNextRefresh(`Next refresh in ${h}h ${m}m`);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [lastFetched]);
+  const appliedIds = new Set(
+    apps.filter(a => !["saved"].includes(a.status)).map(a => a.roleId)
+  );
 
-  const fetchJobs = useCallback(async (force = false) => {
-    setLoading(true);
-    setError("");
+  // ── Discover fetch ──────────────────────────────────────────────
+  const fetchDiscover = useCallback(async (force = false) => {
+    setDiscoverLoading(true);
+    setDiscoverError("");
     try {
-      const res = await fetch(`/api/jobs${force ? "?force=true" : ""}`);
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const res = await fetch(`/api/discover-jobs${force ? "?force=true" : ""}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setRoles(data.roles || []);
-      setLastFetched(data.fetchedAt);
+      setCompanies(data.companies || []);
+      setDiscoverFetched(data.fetchedAt);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load roles");
+      setDiscoverError(e instanceof Error ? e.message : "Failed to load");
     } finally {
-      setLoading(false);
+      setDiscoverLoading(false);
     }
   }, []);
 
-  const isTracked = (role: Role) => apps.some(a => a.roleId === role.id);
-
-  const toggleTrack = (role: Role) => {
-    if (isTracked(role)) {
-      saveApps(apps.filter(a => a.roleId !== role.id));
-    } else {
-      const app: TrackedApp = {
-        id: `app-${Date.now()}`,
-        roleId: role.id,
-        title: role.title,
-        company: role.company,
-        industry: role.industry,
-        location: role.location,
-        score: role.score,
-        status: "saved",
-        dateAdded: new Date().toLocaleDateString(),
-        dateApplied: "",
-        link: "",
-        notes: "",
-      };
-      saveApps([...apps, app]);
+  // ── Live fetch ──────────────────────────────────────────────────
+  const fetchLive = useCallback(async (force = false) => {
+    setLiveLoading(true);
+    setLiveError("");
+    try {
+      const res = await fetch(`/api/live-jobs${force ? "?force=true" : ""}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setLiveRoles(data.roles || []);
+      setLiveFetched(data.fetchedAt);
+    } catch (e) {
+      setLiveError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLiveLoading(false);
     }
+  }, []);
+
+  // ── Track helpers ───────────────────────────────────────────────
+  const isTracked = (id: string) => apps.some(a => a.roleId === id);
+
+  const trackRole = (role: DiscoverRole | Role, source: "discover" | "live") => {
+    if (isTracked(role.id)) {
+      saveApps(apps.filter(a => a.roleId !== role.id));
+      return;
+    }
+    const app: TrackedApp = {
+      id: `app-${Date.now()}`,
+      roleId: role.id,
+      title: role.title,
+      company: role.company,
+      industry: role.industry,
+      location: "location" in role ? role.location : "See careers page",
+      score: role.score,
+      status: "saved",
+      source,
+      dateAdded: new Date().toLocaleDateString(),
+      dateApplied: "",
+      link: "careersUrl" in role ? role.careersUrl : (role as Role).jobUrl || "",
+      notes: "",
+    };
+    saveApps([...apps, app]);
   };
 
-  const updateApp = (id: string, patch: Partial<TrackedApp>) => {
+  const updateApp = (id: string, patch: Partial<TrackedApp>) =>
     saveApps(apps.map(a => a.id === id ? { ...a, ...patch } : a));
-  };
 
   const removeApp = (id: string) => saveApps(apps.filter(a => a.id !== id));
 
-  // Filtered + sorted roles
-  const industries = [ALL_INDUSTRIES, ...Array.from(new Set(roles.map(r => r.industry)))];
-  const filtered = roles
-    .filter(r => industryFilter === ALL_INDUSTRIES || r.industry === industryFilter)
-    .filter(r => !searchQ || [r.title, r.company, r.industry, r.reason, ...(r.tags || [])].join(" ").toLowerCase().includes(searchQ.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === "score") return b.score - a.score;
-      if (sortBy === "industry") return a.industry.localeCompare(b.industry);
-      return a.title.localeCompare(b.title);
-    });
+  // ── Filtered lists ──────────────────────────────────────────────
+  const discoverIndustries = [ALL, ...Array.from(new Set(companies.map(c => c.industry)))];
+  const filteredCompanies = companies
+    .filter(c => !appliedIds.has(c.id))
+    .filter(c => discoverIndustry === ALL || c.industry === discoverIndustry)
+    .filter(c => !discoverSearch || [c.name, c.industry, c.whyFit].join(" ").toLowerCase().includes(discoverSearch.toLowerCase()));
 
-  // Pipeline counts
+  const liveIndustries = [ALL, ...Array.from(new Set(liveRoles.map(r => r.industry)))];
+  const filteredLive = liveRoles
+    .filter(r => !appliedIds.has(r.id))
+    .filter(r => liveIndustry === ALL || r.industry === liveIndustry)
+    .filter(r => !liveSearch || [r.title, r.company, r.industry].join(" ").toLowerCase().includes(liveSearch.toLowerCase()));
+
   const pipelineCounts = Object.keys(STATUS_META).reduce((acc, s) => {
     acc[s as AppStatus] = apps.filter(a => a.status === s).length;
     return acc;
@@ -151,25 +175,15 @@ export default function TrackerPage() {
             </svg>
             <span>Job Tracker</span>
           </div>
-          <span className={styles.headerBadge}>H-1B Sponsorship Only</span>
-        </div>
-        <div className={styles.headerRight}>
-          {lastFetched && <span className={styles.refreshMeta}>{nextRefresh}</span>}
-          <button className={styles.btnPrimary} onClick={() => fetchJobs(true)} disabled={loading}>
-            {loading ? (
-              <><span className={styles.spinner} /> Searching...</>
-            ) : (
-              <>↻ Refresh roles</>
-            )}
-          </button>
+          <span className={styles.headerBadge}>H-1B Sponsorship</span>
         </div>
       </header>
 
       {/* Stats */}
       <div className={styles.statsRow}>
         {[
-          { label: "Roles found", val: roles.length || "—" },
-          { label: "Strong matches (85+)", val: roles.filter(r => r.score >= 85).length || (roles.length ? "0" : "—") },
+          { label: "Companies to target", val: companies.length || "—" },
+          { label: "Live postings", val: liveRoles.length || "—" },
           { label: "Applications", val: apps.length },
           { label: "Interviewing", val: pipelineCounts.interviewing },
         ].map(s => (
@@ -182,88 +196,167 @@ export default function TrackerPage() {
 
       {/* Tabs */}
       <div className={styles.tabs}>
-        {(["discover", "applications", "pipeline"] as const).map(t => (
-          <button key={t} className={`${styles.tab} ${tab === t ? styles.tabActive : ""}`} onClick={() => setTab(t)}>
-            {t === "discover" && "Discover"}
-            {t === "applications" && `Applications${apps.length > 0 ? ` (${apps.length})` : ""}`}
-            {t === "pipeline" && "Pipeline"}
+        {([
+          { key: "discover", label: "Discover Companies" },
+          { key: "live", label: `Live Postings${liveRoles.length > 0 ? ` (${filteredLive.length})` : ""}` },
+          { key: "applications", label: `Applications${apps.length > 0 ? ` (${apps.length})` : ""}` },
+          { key: "pipeline", label: "Pipeline" },
+        ] as { key: typeof tab; label: string }[]).map(t => (
+          <button key={t.key} className={`${styles.tab} ${tab === t.key ? styles.tabActive : ""}`} onClick={() => setTab(t.key)}>
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* DISCOVER */}
+      {/* ── DISCOVER TAB ── */}
       {tab === "discover" && (
         <div>
-          {/* Search + sort */}
-          <div className={styles.toolbar}>
-            <input
-              className={styles.searchInput}
-              type="text"
-              placeholder="Search roles, companies, skills..."
-              value={searchQ}
-              onChange={e => setSearchQ(e.target.value)}
-            />
-            <select className={styles.sortSelect} value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}>
-              <option value="score">Sort: Match score</option>
-              <option value="industry">Sort: Industry</option>
-              <option value="alpha">Sort: A–Z</option>
-            </select>
+          <div className={styles.tabHeader}>
+            <div>
+              <p className={styles.tabDesc}>AI-researched companies you should target — H-1B verified, non-traditional industries, matched to your background.</p>
+              {discoverFetched && <span className={styles.refreshInfo}>Updated {new Date(discoverFetched).toLocaleTimeString()}</span>}
+            </div>
+            <button className={styles.btnPrimary} onClick={() => fetchDiscover(true)} disabled={discoverLoading}>
+              {discoverLoading ? <><Spinner /> Researching...</> : <>↻ Refresh</>}
+            </button>
           </div>
 
-          {/* Industry chips */}
-          {roles.length > 0 && (
-            <div className={styles.chipRow}>
-              {industries.map(ind => (
-                <button
-                  key={ind}
-                  className={`${styles.chip} ${industryFilter === ind ? styles.chipActive : ""}`}
-                  onClick={() => setIndustryFilter(ind)}
-                >
-                  {ind}
-                </button>
+          {companies.length > 0 && (
+            <>
+              <div className={styles.toolbar}>
+                <input className={styles.searchInput} type="text" placeholder="Search companies, industries..." value={discoverSearch} onChange={e => setDiscoverSearch(e.target.value)} />
+              </div>
+              <div className={styles.chipRow}>
+                {discoverIndustries.map(ind => (
+                  <button key={ind} className={`${styles.chip} ${discoverIndustry === ind ? styles.chipActive : ""}`} onClick={() => setDiscoverIndustry(ind)}>{ind}</button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {discoverError && <div className={styles.errorState}><span>⚠ {discoverError}</span><button className={styles.btnGhost} onClick={() => fetchDiscover(true)}>Retry</button></div>}
+
+          {!discoverLoading && !discoverError && companies.length === 0 && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>🎯</div>
+              <p className={styles.emptyTitle}>Discover your target companies</p>
+              <p className={styles.emptyBody}>Get AI-researched recommendations of H-1B-sponsoring companies across HealthTech, FinTech, Aerospace, Gaming, and more — matched to your background.</p>
+              <button className={styles.btnPrimary} onClick={() => fetchDiscover()}>Find companies now →</button>
+            </div>
+          )}
+
+          {discoverLoading && (
+            <div className={styles.loadingState}>
+              <Spinner large />
+              <p>Researching H-1B-friendly companies across all industries...</p>
+              <p className={styles.loadingSubtext}>This takes about 20 seconds</p>
+            </div>
+          )}
+
+          {!discoverLoading && filteredCompanies.length > 0 && (
+            <div className={styles.companyList}>
+              {filteredCompanies.map(company => (
+                <div key={company.id} className={styles.companyCard}>
+                  <div className={styles.companyHeader} onClick={() => setExpandedCompany(expandedCompany === company.id ? null : company.id)}>
+                    <div className={styles.companyLeft}>
+                      <ScoreBadge score={company.score} />
+                      <div>
+                        <div className={styles.companyName}>{company.name}</div>
+                        <div className={styles.companyMeta}>{company.industry} · {company.roles.length} matching role{company.roles.length !== 1 ? "s" : ""}</div>
+                      </div>
+                    </div>
+                    <div className={styles.companyActions}>
+                      <a href={company.careersUrl} target="_blank" rel="noopener noreferrer" className={styles.btnGhost} onClick={e => e.stopPropagation()}>↗ Careers</a>
+                      <span className={styles.expandIcon}>{expandedCompany === company.id ? "▲" : "▼"}</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.companyBody}>
+                    <p className={styles.companyWhyFit}>{company.whyFit}</p>
+                    <span className={styles.h1bNote}>✓ {company.whyH1b}</span>
+                  </div>
+
+                  {expandedCompany === company.id && (
+                    <div className={styles.rolesSection}>
+                      <div className={styles.rolesSectionTitle}>Matching roles at {company.name}</div>
+                      {company.roles.map(role => (
+                        <div key={role.id} className={`${styles.roleRow} ${isTracked(role.id) ? styles.roleRowTracked : ""}`}>
+                          <div className={styles.roleRowLeft}>
+                            <ScoreBadge score={role.score} />
+                            <div>
+                              <div className={styles.roleTitle}>{role.title}</div>
+                              <div className={styles.roleReason}>{role.reason}</div>
+                              <div className={styles.tagRow}>
+                                {(role.tags || []).map(t => <span key={t} className={styles.tag}>{t}</span>)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className={styles.roleRowActions}>
+                            <a href={role.careersUrl} target="_blank" rel="noopener noreferrer" className={styles.btnGhost}>↗ Apply</a>
+                            <button className={`${styles.trackBtn} ${isTracked(role.id) ? styles.trackBtnActive : ""}`} onClick={() => trackRole(role, "discover")}>
+                              {isTracked(role.id) ? "✓ Tracked" : "+ Track"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
+        </div>
+      )}
 
-          {/* Refresh info */}
-          {lastFetched && (
-            <div className={styles.refreshInfo}>
-              Last updated {new Date(lastFetched).toLocaleTimeString()} · {filtered.length} role{filtered.length !== 1 ? "s" : ""}
+      {/* ── LIVE POSTINGS TAB ── */}
+      {tab === "live" && (
+        <div>
+          <div className={styles.tabHeader}>
+            <div>
+              <p className={styles.tabDesc}>Real job postings from LinkedIn, Indeed, Glassdoor & more — updated weekly, scored against your resume.</p>
+              {liveFetched && <span className={styles.refreshInfo}>Updated {new Date(liveFetched).toLocaleTimeString()}</span>}
             </div>
+            <button className={styles.btnPrimary} onClick={() => fetchLive(true)} disabled={liveLoading}>
+              {liveLoading ? <><Spinner /> Loading...</> : <>↻ Refresh</>}
+            </button>
+          </div>
+
+          {liveRoles.length > 0 && (
+            <>
+              <div className={styles.toolbar}>
+                <input className={styles.searchInput} type="text" placeholder="Search roles, companies..." value={liveSearch} onChange={e => setLiveSearch(e.target.value)} />
+              </div>
+              <div className={styles.chipRow}>
+                {liveIndustries.map(ind => (
+                  <button key={ind} className={`${styles.chip} ${liveIndustry === ind ? styles.chipActive : ""}`} onClick={() => setLiveIndustry(ind)}>{ind}</button>
+                ))}
+              </div>
+            </>
           )}
 
-          {/* States */}
-          {error && (
-            <div className={styles.errorState}>
-              <span>⚠ {error}</span>
-              <button className={styles.btnGhost} onClick={() => fetchJobs(true)}>Retry</button>
-            </div>
-          )}
+          {liveError && <div className={styles.errorState}><span>⚠ {liveError}</span><button className={styles.btnGhost} onClick={() => fetchLive(true)}>Retry</button></div>}
 
-          {!loading && !error && roles.length === 0 && (
+          {!liveLoading && !liveError && liveRoles.length === 0 && (
             <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>🎯</div>
-              <p className={styles.emptyTitle}>Find your next role</p>
-              <p className={styles.emptyBody}>
-                Click &ldquo;Refresh roles&rdquo; to discover H-1B-friendly SWE positions in non-traditional industries, ranked by how well they match your background.
-              </p>
-              <button className={styles.btnPrimary} onClick={() => fetchJobs()}>Find roles now →</button>
+              <div className={styles.emptyIcon}>📋</div>
+              <p className={styles.emptyTitle}>Load live job postings</p>
+              <p className={styles.emptyBody}>Pull real postings from across the web, scored against your resume. Roles you&apos;ve already applied to won&apos;t show up.</p>
+              <button className={styles.btnPrimary} onClick={() => fetchLive()}>Load postings →</button>
             </div>
           )}
 
-          {loading && (
+          {liveLoading && (
             <div className={styles.loadingState}>
-              <div className={styles.spinnerLg} />
-              <p>Searching for H-1B-friendly roles matching your background...</p>
-              <p className={styles.loadingSubtext}>This takes about 15 seconds</p>
+              <Spinner large />
+              <p>Fetching live postings across all industries...</p>
+              <p className={styles.loadingSubtext}>This takes about 20 seconds</p>
             </div>
           )}
 
-          {/* Role cards */}
-          {!loading && filtered.length > 0 && (
+          {!liveLoading && filteredLive.length > 0 && (
             <div className={styles.roleList}>
-              {filtered.map(role => (
-                <div key={role.id} className={`${styles.roleCard} ${isTracked(role) ? styles.roleCardTracked : ""}`}>
+              {filteredLive.map(role => (
+                <div key={role.id} className={`${styles.roleCard} ${isTracked(role.id) ? styles.roleCardTracked : ""}`}>
                   <ScoreBadge score={role.score} />
                   <div className={styles.roleBody}>
                     <div className={styles.roleTop}>
@@ -272,21 +365,15 @@ export default function TrackerPage() {
                         <div className={styles.roleMeta}>{role.company} · {role.location}</div>
                       </div>
                       <div className={styles.roleActions}>
-                        {role.jobUrl && (
-                          <a href={role.jobUrl} target="_blank" rel="noopener noreferrer" className={styles.btnGhost}>
-                            ↗ View
-                          </a>
-                        )}
-                        <button
-                          className={`${styles.trackBtn} ${isTracked(role) ? styles.trackBtnActive : ""}`}
-                          onClick={() => toggleTrack(role)}
-                        >
-                          {isTracked(role) ? "✓ Tracked" : "+ Track"}
+                        {role.isKnownH1b && <span className={styles.tagH1b}>✓ H-1B</span>}
+                        {!role.isKnownH1b && <span className={styles.tagVerify}>Verify H-1B</span>}
+                        {role.jobUrl && <a href={role.jobUrl} target="_blank" rel="noopener noreferrer" className={styles.btnGhost}>↗ Apply</a>}
+                        <button className={`${styles.trackBtn} ${isTracked(role.id) ? styles.trackBtnActive : ""}`} onClick={() => trackRole(role, "live")}>
+                          {isTracked(role.id) ? "✓ Tracked" : "+ Track"}
                         </button>
                       </div>
                     </div>
                     <div className={styles.tagRow}>
-                      <span className={styles.tagH1b}>H-1B</span>
                       <span className={styles.tagInd}>{role.industry}</span>
                       {(role.tags || []).map(t => <span key={t} className={styles.tag}>{t}</span>)}
                     </div>
@@ -299,14 +386,14 @@ export default function TrackerPage() {
         </div>
       )}
 
-      {/* APPLICATIONS */}
+      {/* ── APPLICATIONS TAB ── */}
       {tab === "applications" && (
         <div>
           {apps.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>📋</div>
               <p className={styles.emptyTitle}>No applications yet</p>
-              <p className={styles.emptyBody}>Discover roles and click &ldquo;+ Track&rdquo; to start tracking your applications here.</p>
+              <p className={styles.emptyBody}>Track roles from Discover or Live Postings by clicking &quot;+ Track&quot;.</p>
               <button className={styles.btnGhost} onClick={() => setTab("discover")}>Go to Discover →</button>
             </div>
           ) : (
@@ -316,14 +403,13 @@ export default function TrackerPage() {
                   <div className={styles.appCardHeader}>
                     <div>
                       <div className={styles.appTitle}>{app.title}</div>
-                      <div className={styles.appMeta}>{app.company} · {app.industry} · Match: {app.score}</div>
+                      <div className={styles.appMeta}>
+                        {app.company} · {app.industry} · Score: {app.score}
+                        <span className={styles.sourceTag}>{app.source === "discover" ? "AI Discovered" : "Live Posting"}</span>
+                      </div>
                     </div>
                     <div className={styles.appCardActions}>
-                      <select
-                        className={styles.statusSelect}
-                        value={app.status}
-                        onChange={e => updateApp(app.id, { status: e.target.value as AppStatus })}
-                      >
+                      <select className={styles.statusSelect} value={app.status} onChange={e => updateApp(app.id, { status: e.target.value as AppStatus })}>
                         {Object.entries(STATUS_META).map(([s, m]) => (
                           <option key={s} value={s}>{m.label}</option>
                         ))}
@@ -352,7 +438,7 @@ export default function TrackerPage() {
         </div>
       )}
 
-      {/* PIPELINE */}
+      {/* ── PIPELINE TAB ── */}
       {tab === "pipeline" && (
         <div>
           <div className={styles.pipelineBar}>
@@ -365,11 +451,8 @@ export default function TrackerPage() {
               </div>
             ))}
           </div>
-
           {apps.length === 0 ? (
-            <div className={styles.emptyState}>
-              <p className={styles.emptyBody}>No applications tracked yet.</p>
-            </div>
+            <div className={styles.emptyState}><p className={styles.emptyBody}>No applications tracked yet.</p></div>
           ) : (
             <div className={styles.pipelineGroups}>
               {(["interviewing", "applied", "saved", "offer", "rejected", "withdrawn"] as AppStatus[]).map(s => {
