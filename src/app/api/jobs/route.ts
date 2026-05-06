@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash-001",
       generationConfig: { responseMimeType: "application/json" },
       systemInstruction: "You are a job search assistant. Return ONLY valid JSON with no markdown, no backticks, no preamble. The response must be directly parseable by JSON.parse().",
     });
