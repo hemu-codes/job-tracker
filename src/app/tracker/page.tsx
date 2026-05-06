@@ -132,7 +132,7 @@ export default function TrackerPage() {
       source,
       dateAdded: new Date().toLocaleDateString(),
       dateApplied: "",
-      link: "careersUrl" in role ? role.careersUrl : (role as Role).jobUrl || "",
+      link: "careersUrl" in role ? (role.careersUrl || "") : ((role as Role).jobUrl || ""),
       notes: "",
     };
     saveApps([...apps, app]);
