@@ -13,45 +13,51 @@ function isCacheValid(): boolean {
 }
 
 const SEARCH_QUERIES = [
-  { keywords: "software engineer healthtech", industry: "HealthTech" },
-  { keywords: "software engineer fintech banking", industry: "FinTech" },
-  { keywords: "software engineer aerospace defense", industry: "Aerospace" },
-  { keywords: "software engineer logistics supply chain", industry: "Logistics" },
-  { keywords: "software engineer biotech life sciences", industry: "Biotech" },
-  { keywords: "software engineer insurance", industry: "Insurance" },
-  { keywords: "platform engineer SRE devops", industry: "Traditional Tech" },
-  { keywords: "software engineer retail ecommerce", industry: "RetailTech" },
+  { query: "software engineer healthtech", industry: "HealthTech" },
+  { query: "software engineer fintech", industry: "FinTech" },
+  { query: "software engineer aerospace", industry: "Aerospace" },
+  { query: "software engineer logistics", industry: "Logistics" },
+  { query: "software engineer biotech", industry: "Biotech" },
+  { query: "software engineer insurance", industry: "Insurance" },
+  { query: "platform engineer SRE", industry: "Traditional Tech" },
+  { query: "software engineer retail ecommerce", industry: "RetailTech" },
 ];
 
-interface AdzunaJob {
-  id: string;
-  title: string;
-  company: { display_name: string };
-  location: { display_name: string };
-  redirect_url: string;
-  description: string;
+interface JSearchJob {
+  job_id: string;
+  job_title: string;
+  employer_name: string;
+  job_city: string;
+  job_state: string;
+  job_apply_link: string;
+  job_description: string;
+  job_is_remote: boolean;
   industry: string;
 }
 
-async function fetchAdzunaJobs(query: { keywords: string; industry: string }) {
-  const appId = process.env.ADZUNA_APP_ID;
-  const apiKey = process.env.ADZUNA_API_KEY;
-  const url = new URL("https://api.adzuna.com/v1/api/jobs/us/search/1");
-  url.searchParams.set("app_id", appId!);
-  url.searchParams.set("app_key", apiKey!);
-  url.searchParams.set("what", query.keywords);
-  url.searchParams.set("where", "Seattle");
-  url.searchParams.set("distance", "50");
-  url.searchParams.set("results_per_page", "10");
-  url.searchParams.set("sort_by", "date");
-  url.searchParams.set("content-type", "application/json");
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error("Adzuna error: " + res.status);
+async function fetchJSearchJobs(query: { query: string; industry: string }) {
+  const apiKey = process.env.JSEARCH_API_KEY;
+  const url = new URL("https://jsearch.p.rapidapi.com/search");
+  url.searchParams.set("query", `${query.query} in Seattle, WA`);
+  url.searchParams.set("num_pages", "1");
+  url.searchParams.set("page", "1");
+  url.searchParams.set("date_posted", "week");
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      "x-rapidapi-host": "jsearch.p.rapidapi.com",
+      "x-rapidapi-key": apiKey!,
+    },
+  });
+  if (!res.ok) throw new Error("JSearch error: " + res.status);
   const data = await res.json();
-  return (data.results || []).map((job: AdzunaJob) => ({ ...job, industry: query.industry }));
+  return (data.data || []).map((job: JSearchJob) => ({
+    ...job,
+    industry: query.industry,
+  }));
 }
 
-async function scoreJobsWithGemini(jobs: AdzunaJob[]) {
+async function scoreJobsWithGemini(jobs: JSearchJob[]) {
   const geminiKey = process.env.GEMINI_API_KEY;
   if (!geminiKey) throw new Error("GEMINI_API_KEY not configured");
   const genAI = new GoogleGenerativeAI(geminiKey);
@@ -62,9 +68,9 @@ async function scoreJobsWithGemini(jobs: AdzunaJob[]) {
   });
   const jobSummaries = jobs.map((j, i) => ({
     index: i,
-    title: j.title,
-    company: j.company?.display_name,
-    description: j.description?.slice(0, 300),
+    title: j.job_title,
+    company: j.employer_name,
+    description: j.job_description?.slice(0, 300),
     industry: j.industry,
   }));
   const prompt = "Given this candidate resume, score each job 60-95 based on match quality.\n\nResume:\n" + RESUME_CONTEXT + "\n\nJobs:\n" + JSON.stringify(jobSummaries) + '\n\nReturn JSON: { "scores": [{ "index": number, "score": number, "tags": ["skill1","skill2"], "reason": "string" }] }';
@@ -80,45 +86,50 @@ export async function GET(request: Request) {
   if (!force && isCacheValid() && cache) {
     return NextResponse.json({ ...cache, cached: true });
   }
-  if (!process.env.ADZUNA_APP_ID || !process.env.ADZUNA_API_KEY) {
-    return NextResponse.json({ error: "Adzuna credentials not configured" }, { status: 500 });
+  if (!process.env.JSEARCH_API_KEY) {
+    return NextResponse.json({ error: "JSEARCH_API_KEY not configured" }, { status: 500 });
   }
   try {
-    const results = await Promise.allSettled(SEARCH_QUERIES.map(fetchAdzunaJobs));
-    const allJobs: AdzunaJob[] = [];
+    const results = await Promise.allSettled(SEARCH_QUERIES.map(fetchJSearchJobs));
+    const allJobs: JSearchJob[] = [];
     const seen = new Set<string>();
     for (const result of results) {
       if (result.status === "fulfilled") {
         for (const job of result.value) {
-          if (!seen.has(job.id)) { seen.add(job.id); allJobs.push(job); }
+          if (!seen.has(job.job_id)) { seen.add(job.job_id); allJobs.push(job); }
         }
       }
     }
     if (allJobs.length === 0) {
-      return NextResponse.json({ error: "No jobs found from Adzuna" }, { status: 500 });
+      return NextResponse.json({ error: "No jobs found from JSearch" }, { status: 500 });
     }
 
-    // Filter to known H-1B sponsors only
-    const h1bJobs = allJobs.filter(job => isLikelyH1bSponsor(job.company?.display_name));
+    // Filter to known H-1B sponsors
+    const h1bJobs = allJobs.filter(job => isLikelyH1bSponsor(job.employer_name));
     const jobsToScore = h1bJobs.length > 0 ? h1bJobs : allJobs;
 
     const scores = await scoreJobsWithGemini(jobsToScore);
     const scoreMap = new Map(scores.map((s: { index: number; score: number; tags: string[]; reason: string }) => [s.index, s]));
+
     const roles: Role[] = jobsToScore.map((job, i) => {
       const scored = scoreMap.get(i) as { score: number; tags: string[]; reason: string } | undefined;
+      const location = job.job_is_remote
+        ? "Remote"
+        : [job.job_city, job.job_state].filter(Boolean).join(", ") || "Seattle, WA";
       return {
-        id: "role-" + job.id,
-        title: job.title,
-        company: job.company?.display_name || "Unknown",
+        id: "role-" + job.job_id,
+        title: job.job_title,
+        company: job.employer_name || "Unknown",
         industry: job.industry as Role["industry"],
-        location: job.location?.display_name || "Seattle, WA",
+        location,
         score: scored?.score ?? 70,
         tags: scored?.tags ?? [],
         reason: scored?.reason ?? "Matched based on your skills and experience.",
-        jobUrl: job.redirect_url,
+        jobUrl: job.job_apply_link,
         fetchedAt: new Date().toISOString(),
       };
     });
+
     roles.sort((a, b) => b.score - a.score);
     cache = { roles, fetchedAt: new Date().toISOString() };
     return NextResponse.json({ ...cache, cached: false });
