@@ -1,4 +1,4 @@
-# H-1B Job Tracker
+# Job Tracker
 
 An AI-powered job search dashboard for software engineers on H-1B visas. Discovers roles in non-traditional industries, ranks them by resume match score, and tracks your full application pipeline.
 
