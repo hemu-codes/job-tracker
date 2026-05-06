@@ -48,6 +48,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...cache, cached: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const stack = err instanceof Error ? err.stack : "";
+    console.error("Jobs API error:", message, stack);
+    return NextResponse.json({ error: message, detail: stack }, { status: 500 });
   }
 }
