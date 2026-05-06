@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { RESUME_CONTEXT } from "@/lib/resume";
 import { Role, JobsCache } from "@/types";
+import { isLikelyH1bSponsor } from "@/lib/h1b-sponsors";
 
 let cache: JobsCache | null = null;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -96,9 +97,14 @@ export async function GET(request: Request) {
     if (allJobs.length === 0) {
       return NextResponse.json({ error: "No jobs found from Adzuna" }, { status: 500 });
     }
-    const scores = await scoreJobsWithGemini(allJobs);
+
+    // Filter to known H-1B sponsors only
+    const h1bJobs = allJobs.filter(job => isLikelyH1bSponsor(job.company?.display_name));
+    const jobsToScore = h1bJobs.length > 0 ? h1bJobs : allJobs;
+
+    const scores = await scoreJobsWithGemini(jobsToScore);
     const scoreMap = new Map(scores.map((s: { index: number; score: number; tags: string[]; reason: string }) => [s.index, s]));
-    const roles: Role[] = allJobs.map((job, i) => {
+    const roles: Role[] = jobsToScore.map((job, i) => {
       const scored = scoreMap.get(i) as { score: number; tags: string[]; reason: string } | undefined;
       return {
         id: "role-" + job.id,
