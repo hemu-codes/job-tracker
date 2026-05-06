@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { buildJobsPrompt } from "@/lib/resume";
 import { Role, JobsCache } from "@/types";
 
-// In-memory cache (resets on cold start — for persistence use KV/Redis)
 let cache: JobsCache | null = null;
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 function isCacheValid(): boolean {
   if (!cache) return false;
@@ -20,31 +19,23 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...cache, cached: true });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
   }
 
-  const client = new Anthropic({ apiKey });
-
   try {
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system:
-        "You are a job search assistant. Return ONLY valid JSON with no markdown, no backticks, no preamble. The response must be directly parseable by JSON.parse().",
-      messages: [{ role: "user", content: buildJobsPrompt() }],
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: { responseMimeType: "application/json" },
+      systemInstruction: "You are a job search assistant. Return ONLY valid JSON with no markdown, no backticks, no preamble. The response must be directly parseable by JSON.parse().",
     });
 
-    const text = message.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as { type: "text"; text: string }).text)
-      .join("");
-
+    const result = await model.generateContent(buildJobsPrompt());
+    const text = result.response.text();
     const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+
     const roles: Role[] = (parsed.roles || []).map(
       (r: Omit<Role, "id" | "fetchedAt">, i: number) => ({
         ...r,
