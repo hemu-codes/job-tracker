@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useApps } from "@/lib/useApps";
 import { Role, TrackedApp, AppStatus, DiscoverCompany, DiscoverRole } from "@/types";
 import styles from "./tracker.module.css";
 
@@ -69,20 +70,9 @@ export default function TrackerPage() {
   const [liveIndustry, setLiveIndustry] = useState(ALL);
   const [liveSearch, setLiveSearch] = useState("");
 
-  // Apps state
-  const [apps, setApps] = useState<TrackedApp[]>([]);
+  // Apps state (cross-device sync via Redis)
+  const { apps, saveApps, syncing } = useApps();
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("hemu_job_apps_v2");
-      if (saved) setApps(JSON.parse(saved));
-    } catch {}
-  }, []);
-
-  const saveApps = (next: TrackedApp[]) => {
-    setApps(next);
-    localStorage.setItem("hemu_job_apps_v2", JSON.stringify(next));
-  };
 
   const appliedIds = new Set(
     apps.filter(a => !["saved"].includes(a.status)).map(a => a.roleId)
