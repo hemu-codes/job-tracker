@@ -52,7 +52,7 @@ export default function TrackerPage() {
   });
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverError, setDiscoverError] = useState("");
-  const [discoverFetched, setDiscoverFetched] = useState<string | null>(null);
+  const [discoverFetched, setDiscoverFetched] = useState<string | null>(() => { try { return typeof window !== 'undefined' ? localStorage.getItem('hemu_companies_fetched_at') : null; } catch { return null; } });
   const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
   const [discoverIndustry, setDiscoverIndustry] = useState(ALL);
   const [discoverSearch, setDiscoverSearch] = useState("");
@@ -66,7 +66,7 @@ export default function TrackerPage() {
   });
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState("");
-  const [liveFetched, setLiveFetched] = useState<string | null>(null);
+  const [liveFetched, setLiveFetched] = useState<string | null>(() => { try { return typeof window !== 'undefined' ? localStorage.getItem('hemu_live_roles_fetched_at') : null; } catch { return null; } });
   const [liveIndustry, setLiveIndustry] = useState(ALL);
   const [liveSearch, setLiveSearch] = useState("");
 
@@ -88,6 +88,7 @@ export default function TrackerPage() {
       if (data.error) throw new Error(data.error);
       setCompanies(data.companies || []);
       localStorage.setItem("hemu_companies", JSON.stringify(data.companies || []));
+      localStorage.setItem("hemu_companies_fetched_at", data.fetchedAt);
       setDiscoverFetched(data.fetchedAt);
     } catch (e) {
       setDiscoverError(e instanceof Error ? e.message : "Failed to load");
@@ -106,6 +107,7 @@ export default function TrackerPage() {
       if (data.error) throw new Error(data.error);
       setLiveRoles(data.roles || []);
       localStorage.setItem("hemu_live_roles", JSON.stringify(data.roles || []));
+      localStorage.setItem("hemu_live_roles_fetched_at", data.fetchedAt);
       setLiveFetched(data.fetchedAt);
     } catch (e) {
       setLiveError(e instanceof Error ? e.message : "Failed to load");
