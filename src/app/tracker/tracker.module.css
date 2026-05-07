@@ -459,3 +459,9 @@
 
 .tagVerify { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--amber-dim); color: var(--amber); }
 .sourceTag { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: var(--accent-dim); color: var(--accent); margin-left: 8px; }
+
+.refreshBanner { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: var(--radius-md); font-size: 12px; margin-bottom: 1rem; }
+.refreshBannerFresh { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+.refreshBannerStale { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+.refreshBannerBtn { background: transparent; border: 1px solid currentColor; border-radius: var(--radius-sm); padding: 3px 10px; font-size: 11px; color: inherit; cursor: pointer; font-family: var(--font); }
+.refreshBannerBtn:hover { opacity: 0.8; }

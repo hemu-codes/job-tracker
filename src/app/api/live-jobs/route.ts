@@ -3,14 +3,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { RESUME_CONTEXT } from "@/lib/resume";
 import { Role, JobsCache } from "@/types";
 import { isLikelyH1bSponsor } from "@/lib/h1b-sponsors";
+import { Redis } from "@upstash/redis";
 
-let cache: JobsCache | null = null;
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL!,
+  token: process.env.KV_REST_API_TOKEN!,
+});
+
+const CACHE_KEY = "live:roles";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-
-function isCacheValid(): boolean {
-  if (!cache) return false;
-  return Date.now() - new Date(cache.fetchedAt).getTime() < CACHE_TTL_MS;
-}
 
 const SEARCH_QUERIES = [
   { query: "software engineer healthtech", industry: "HealthTech" },
@@ -29,7 +30,6 @@ interface JSearchJob {
   job_id: string;
   job_title: string;
   employer_name: string;
-  employer_website?: string;
   job_city: string;
   job_state: string;
   job_apply_link: string;
@@ -47,7 +47,6 @@ async function fetchJSearchJobs(query: { query: string; industry: string }) {
   url.searchParams.set("page", "1");
   url.searchParams.set("date_posted", "week");
   url.searchParams.set("remote_jobs_only", "false");
-
   const res = await fetch(url.toString(), {
     headers: {
       "x-rapidapi-host": "jsearch.p.rapidapi.com",
@@ -56,10 +55,7 @@ async function fetchJSearchJobs(query: { query: string; industry: string }) {
   });
   if (!res.ok) throw new Error("JSearch error: " + res.status);
   const data = await res.json();
-  return (data.data || []).map((job: JSearchJob) => ({
-    ...job,
-    industry: query.industry,
-  }));
+  return (data.data || []).map((job: JSearchJob) => ({ ...job, industry: query.industry }));
 }
 
 async function scoreJobsWithGemini(jobs: JSearchJob[]) {
@@ -80,9 +76,7 @@ async function scoreJobsWithGemini(jobs: JSearchJob[]) {
   }));
   const prompt =
     "Given this candidate resume, score each job 60-95 based on match quality.\n\nResume:\n" +
-    RESUME_CONTEXT +
-    "\n\nJobs:\n" +
-    JSON.stringify(jobSummaries) +
+    RESUME_CONTEXT + "\n\nJobs:\n" + JSON.stringify(jobSummaries) +
     '\n\nReturn JSON: { "scores": [{ "index": number, "score": number, "tags": ["skill1","skill2"], "reason": "string" }] }';
   const result = await model.generateContent(prompt);
   const text = result.response.text();
@@ -93,12 +87,20 @@ async function scoreJobsWithGemini(jobs: JSearchJob[]) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const force = searchParams.get("force") === "true";
-  if (!force && isCacheValid() && cache) {
-    return NextResponse.json({ ...cache, cached: true });
+
+  if (!force) {
+    try {
+      const cached = await redis.get<JobsCache>(CACHE_KEY);
+      if (cached && Date.now() - new Date(cached.fetchedAt).getTime() < CACHE_TTL_MS) {
+        return NextResponse.json({ ...cached, cached: true });
+      }
+    } catch {}
   }
+
   if (!process.env.JSEARCH_API_KEY) {
     return NextResponse.json({ error: "JSEARCH_API_KEY not configured" }, { status: 500 });
   }
+
   try {
     const results = await Promise.allSettled(SEARCH_QUERIES.map(fetchJSearchJobs));
     const allJobs: JSearchJob[] = [];
@@ -110,18 +112,14 @@ export async function GET(request: Request) {
         }
       }
     }
-    if (allJobs.length === 0) {
-      return NextResponse.json({ error: "No jobs found" }, { status: 500 });
-    }
+    if (allJobs.length === 0) return NextResponse.json({ error: "No jobs found" }, { status: 500 });
+
     const scores = await scoreJobsWithGemini(allJobs);
-    const scoreMap = new Map(
-      scores.map((s: { index: number; score: number; tags: string[]; reason: string }) => [s.index, s])
-    );
+    const scoreMap = new Map(scores.map((s: { index: number; score: number; tags: string[]; reason: string }) => [s.index, s]));
+
     const roles: Role[] = allJobs.map((job, i) => {
       const scored = scoreMap.get(i) as { score: number; tags: string[]; reason: string } | undefined;
-      const location = job.job_is_remote
-        ? "Remote"
-        : [job.job_city, job.job_state].filter(Boolean).join(", ") || "Unknown";
+      const location = job.job_is_remote ? "Remote" : [job.job_city, job.job_state].filter(Boolean).join(", ") || "Unknown";
       return {
         id: "live-" + job.job_id,
         title: job.job_title,
@@ -137,9 +135,11 @@ export async function GET(request: Request) {
         postedAt: job.job_posted_at_datetime_utc,
       };
     });
+
     roles.sort((a, b) => b.score - a.score);
-    cache = { roles, fetchedAt: new Date().toISOString() };
-    return NextResponse.json({ ...cache, cached: false });
+    const payload: JobsCache = { roles, fetchedAt: new Date().toISOString() };
+    await redis.set(CACHE_KEY, payload, { ex: 25200 }); // 7hr TTL
+    return NextResponse.json({ ...payload, cached: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Live jobs API error:", message);
