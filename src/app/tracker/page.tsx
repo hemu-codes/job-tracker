@@ -216,16 +216,16 @@ export default function TrackerPage() {
           <div className={styles.tabHeader}>
             <div>
               <p className={styles.tabDesc}>AI-researched companies you should target — H-1B verified, non-traditional industries, matched to your background.</p>
-              {discoverFetched {discoverFetched && <span className={styles.refreshInfo}>Updated {new Date(discoverFetched).toLocaleTimeString()}</span>}{discoverFetched && <span className={styles.refreshInfo}>Updated {new Date(discoverFetched).toLocaleTimeString()}</span>} (() => {
-              const hoursAgo = Math.floor((Date.now() - new Date(discoverFetched).getTime()) / 3600000);
-              const isStale = hoursAgo >= 6;
-              return (
-                <div className={`${styles.refreshBanner} ${isStale ? styles.refreshBannerStale : styles.refreshBannerFresh}`}>
-                  {isStale ? `⚠ Last updated ${hoursAgo}h ago` : `✓ Updated ${hoursAgo === 0 ? "just now" : hoursAgo + "h ago"}`}
-                  {isStale && <button className={styles.refreshBannerBtn} onClick={() => fetchDiscover(true)}>Refresh now →</button>}
-                </div>
-              );
-            })()}
+              {discoverFetched && (() => {
+                const hoursAgo = Math.floor((Date.now() - new Date(discoverFetched).getTime()) / 3600000);
+                const isStale = hoursAgo >= 6;
+                return (
+                  <div className={`${styles.refreshBanner} ${isStale ? styles.refreshBannerStale : styles.refreshBannerFresh}`}>
+                    {isStale ? `⚠ Last updated ${hoursAgo}h ago` : `✓ Updated ${hoursAgo === 0 ? "just now" : hoursAgo + "h ago"}`}
+                    {isStale && <button className={styles.refreshBannerBtn} onClick={() => fetchDiscover(true)}>Refresh now →</button>}
+                  </div>
+                );
+              })()}
             </div>
             <button className={styles.btnPrimary} onClick={() => fetchDiscover(true)} disabled={discoverLoading}>
               {discoverLoading ? <><Spinner /> Researching...</> : <>↻ Refresh</>}
@@ -325,16 +325,16 @@ export default function TrackerPage() {
           <div className={styles.tabHeader}>
             <div>
               <p className={styles.tabDesc}>Real job postings from LinkedIn, Indeed, Glassdoor & more — updated weekly, scored against your resume.</p>
-              {liveFetched {liveFetched && <span className={styles.refreshInfo}>Updated {new Date(liveFetched).toLocaleTimeString()}</span>}{liveFetched && <span className={styles.refreshInfo}>Updated {new Date(liveFetched).toLocaleTimeString()}</span>} (() => {
-              const hoursAgo = Math.floor((Date.now() - new Date(liveFetched).getTime()) / 3600000);
-              const isStale = hoursAgo >= 6;
-              return (
-                <div className={`${styles.refreshBanner} ${isStale ? styles.refreshBannerStale : styles.refreshBannerFresh}`}>
-                  {isStale ? `⚠ Last updated ${hoursAgo}h ago` : `✓ Updated ${hoursAgo === 0 ? "just now" : hoursAgo + "h ago"}`}
-                  {isStale && <button className={styles.refreshBannerBtn} onClick={() => fetchLive(true)}>Refresh now →</button>}
-                </div>
-              );
-            })()}
+              {liveFetched && (() => {
+                const hoursAgo = Math.floor((Date.now() - new Date(liveFetched).getTime()) / 3600000);
+                const isStale = hoursAgo >= 6;
+                return (
+                  <div className={`${styles.refreshBanner} ${isStale ? styles.refreshBannerStale : styles.refreshBannerFresh}`}>
+                    {isStale ? `⚠ Last updated ${hoursAgo}h ago` : `✓ Updated ${hoursAgo === 0 ? "just now" : hoursAgo + "h ago"}`}
+                    {isStale && <button className={styles.refreshBannerBtn} onClick={() => fetchLive(true)}>Refresh now →</button>}
+                  </div>
+                );
+              })()}
             </div>
             <button className={styles.btnPrimary} onClick={() => fetchLive(true)} disabled={liveLoading}>
               {liveLoading ? <><Spinner /> Loading...</> : <>↻ Refresh</>}
