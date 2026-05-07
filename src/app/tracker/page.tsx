@@ -43,7 +43,12 @@ export default function TrackerPage() {
   const [tab, setTab] = useState<"discover" | "live" | "applications" | "pipeline">("discover");
 
   // Discover state
-  const [companies, setCompanies] = useState<DiscoverCompany[]>([]);
+  const [companies, setCompanies] = useState<DiscoverCompany[]>(() => {
+    try {
+      const c = localStorage.getItem("hemu_companies");
+      return c ? JSON.parse(c) : [];
+    } catch { return []; }
+  });
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverError, setDiscoverError] = useState("");
   const [discoverFetched, setDiscoverFetched] = useState<string | null>(null);
@@ -52,7 +57,12 @@ export default function TrackerPage() {
   const [discoverSearch, setDiscoverSearch] = useState("");
 
   // Live state
-  const [liveRoles, setLiveRoles] = useState<Role[]>([]);
+  const [liveRoles, setLiveRoles] = useState<Role[]>(() => {
+    try {
+      const r = localStorage.getItem("hemu_live_roles");
+      return r ? JSON.parse(r) : [];
+    } catch { return []; }
+  });
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState("");
   const [liveFetched, setLiveFetched] = useState<string | null>(null);
@@ -87,6 +97,7 @@ export default function TrackerPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setCompanies(data.companies || []);
+      localStorage.setItem("hemu_companies", JSON.stringify(data.companies || []));
       setDiscoverFetched(data.fetchedAt);
     } catch (e) {
       setDiscoverError(e instanceof Error ? e.message : "Failed to load");
@@ -104,6 +115,7 @@ export default function TrackerPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setLiveRoles(data.roles || []);
+      localStorage.setItem("hemu_live_roles", JSON.stringify(data.roles || []));
       setLiveFetched(data.fetchedAt);
     } catch (e) {
       setLiveError(e instanceof Error ? e.message : "Failed to load");
