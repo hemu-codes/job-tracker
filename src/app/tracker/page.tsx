@@ -288,11 +288,11 @@ export default function TrackerPage() {
       <div className={styles.tabs}>
         {([
           { key: "discover", label: "Discover Companies" },
-          { key: "live", label: `Live Postings${liveRoles.length > 0 ? \` (\${filteredLive.length})\` : ""}` },
-          { key: "contract", label: `Contract Roles${contractRoles.length > 0 ? \` (\${filteredContract.length})\` : ""}` },
-          { key: "applications", label: `Applications${apps.length > 0 ? \` (\${apps.length})\` : ""}` },
+          { key: "live", label: "Live Postings" + (liveRoles.length > 0 ? " (" + filteredLive.length + ")" : "") },
+          { key: "contract", label: "Contract Roles" + (contractRoles.length > 0 ? " (" + filteredContract.length + ")" : "") },
+          { key: "applications", label: "Applications" + (apps.length > 0 ? " (" + apps.length + ")" : "") },
           { key: "pipeline", label: "Pipeline" },
-          { key: "resumes", label: \`Resumes\${resumes.length > 0 ? \` (\${resumes.length})\` : ""}\` },
+          { key: "resumes", label: "Resumes" + (resumes.length > 0 ? " (" + resumes.length + ")" : "") },
         ] as { key: typeof tab; label: string }[]).map(t => (
           <button key={t.key} className={`${styles.tab} ${tab === t.key ? styles.tabActive : ""}`} onClick={() => setTab(t.key)}>
             {t.label}
