@@ -70,6 +70,28 @@ export default function TrackerPage() {
   const [liveIndustry, setLiveIndustry] = useState(ALL);
   const [liveSearch, setLiveSearch] = useState("");
 
+  // Contract state
+  const [contractRoles, setContractRoles] = useState<Role[]>(() => {
+    try {
+      if (typeof window === "undefined") return [];
+      const r = localStorage.getItem("hemu_contract_roles");
+      return r ? JSON.parse(r) : [];
+    } catch { return []; }
+  });
+  const [contractLoading, setContractLoading] = useState(false);
+  const [contractError, setContractError] = useState("");
+  const [contractFetched, setContractFetched] = useState<string | null>(() => {
+    try { return typeof window !== "undefined" ? localStorage.getItem("hemu_contract_fetched_at") : null; } catch { return null; }
+  });
+  const [contractIndustry, setContractIndustry] = useState(ALL);
+  const [contractSearch, setContractSearch] = useState("");
+
+  // Resume state
+  const [resumes, setResumes] = useState<{ id: string; name: string; content: string; uploadedAt: string }[]>([]);
+  const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [resumeError, setResumeError] = useState("");
+
   // Apps state (cross-device sync via Redis)
   const { apps, saveApps, syncing } = useApps();
 
