@@ -465,3 +465,20 @@
 .refreshBannerStale { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
 .refreshBannerBtn { background: transparent; border: 1px solid currentColor; border-radius: var(--radius-sm); padding: 3px 10px; font-size: 11px; color: inherit; cursor: pointer; font-family: var(--font); }
 .refreshBannerBtn:hover { opacity: 0.8; }
+
+.tagContract { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: rgba(124,106,247,0.15); color: var(--accent); }
+
+.resumeUploadBox { background: var(--bg-card); border: 1px dashed var(--border-mid); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; }
+.resumeUploadTitle { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+.resumeUploadDesc { font-size: 12px; color: var(--text-secondary); margin-bottom: 1rem; }
+.resumeUploadForm { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.resumeList { display: flex; flex-direction: column; gap: 10px; }
+.resumeCard { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; }
+.resumeCardActive { border-color: rgba(124,106,247,0.4) !important; background: var(--accent-dim); }
+.resumeCardLeft { display: flex; align-items: center; gap: 12px; }
+.resumeCardActions { display: flex; align-items: center; gap: 8px; }
+.resumeIcon { font-size: 24px; }
+.resumeName { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.resumeMeta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.resumeActiveBadge { font-size: 12px; color: var(--green); background: var(--green-dim); padding: 4px 10px; border-radius: 999px; }

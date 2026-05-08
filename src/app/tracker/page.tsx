@@ -41,7 +41,7 @@ function Spinner({ large }: { large?: boolean }) {
 }
 
 export default function TrackerPage() {
-  const [tab, setTab] = useState<"discover" | "live" | "applications" | "pipeline">("discover");
+  const [tab, setTab] = useState<"discover" | "live" | "contract" | "applications" | "pipeline" | "resumes">("discover");
 
   // Discover state
   const [companies, setCompanies] = useState<DiscoverCompany[]>(() => {
@@ -116,6 +116,86 @@ export default function TrackerPage() {
     }
   }, []);
 
+  // ── Contract fetch ─────────────────────────────────────────────────
+  const fetchContract = useCallback(async (force = false) => {
+    setContractLoading(true);
+    setContractError("");
+    try {
+      const res = await fetch(`/api/contract-jobs${force ? "?force=true" : ""}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setContractRoles(data.roles || []);
+      localStorage.setItem("hemu_contract_roles", JSON.stringify(data.roles || []));
+      localStorage.setItem("hemu_contract_fetched_at", data.fetchedAt);
+      setContractFetched(data.fetchedAt);
+    } catch (e) {
+      setContractError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setContractLoading(false);
+    }
+  }, []);
+
+  // ── Resume functions ────────────────────────────────────────────
+  const loadResumes = useCallback(async () => {
+    const userId = getUserId();
+    if (!userId) return;
+    try {
+      const res = await fetch("/api/resumes", { headers: { "x-user-id": userId } });
+      const data = await res.json();
+      setResumes(data.resumes || []);
+      if (data.resumes?.length > 0 && !activeResumeId) {
+        setActiveResumeId(data.resumes[0].id);
+      }
+    } catch {}
+  }, [activeResumeId]);
+
+  useEffect(() => { loadResumes(); }, [loadResumes]);
+
+  const uploadResume = async (file: File, name: string) => {
+    setResumeUploading(true);
+    setResumeError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const parseRes = await fetch("/api/parse-resume", { method: "POST", body: formData });
+      const parseData = await parseRes.json();
+      if (parseData.error) throw new Error(parseData.error);
+
+      const newResume = {
+        id: `resume-${Date.now()}`,
+        name,
+        content: parseData.text,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      const updated = [...resumes, newResume];
+      const userId = getUserId();
+      await fetch("/api/resumes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-id": userId },
+        body: JSON.stringify({ resumes: updated }),
+      });
+      setResumes(updated);
+      setActiveResumeId(newResume.id);
+    } catch (e) {
+      setResumeError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setResumeUploading(false);
+    }
+  };
+
+  const deleteResume = async (id: string) => {
+    const updated = resumes.filter(r => r.id !== id);
+    const userId = getUserId();
+    await fetch("/api/resumes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-user-id": userId },
+      body: JSON.stringify({ resumes: updated }),
+    });
+    setResumes(updated);
+    if (activeResumeId === id) setActiveResumeId(updated[0]?.id || null);
+  };
+
   // ── Track helpers ───────────────────────────────────────────────
   const isTracked = (id: string) => apps.some(a => a.roleId === id);
 
@@ -160,6 +240,12 @@ export default function TrackerPage() {
     .filter(r => liveIndustry === ALL || r.industry === liveIndustry)
     .filter(r => !liveSearch || [r.title, r.company, r.industry].join(" ").toLowerCase().includes(liveSearch.toLowerCase()));
 
+  const contractIndustries = [ALL, ...Array.from(new Set(contractRoles.map(r => r.industry)))];
+  const filteredContract = contractRoles
+    .filter(r => !appliedIds.has(r.id))
+    .filter(r => contractIndustry === ALL || r.industry === contractIndustry)
+    .filter(r => !contractSearch || [r.title, r.company, r.industry].join(" ").toLowerCase().includes(contractSearch.toLowerCase()));
+
   const pipelineCounts = Object.keys(STATUS_META).reduce((acc, s) => {
     acc[s as AppStatus] = apps.filter(a => a.status === s).length;
     return acc;
@@ -202,9 +288,11 @@ export default function TrackerPage() {
       <div className={styles.tabs}>
         {([
           { key: "discover", label: "Discover Companies" },
-          { key: "live", label: `Live Postings${liveRoles.length > 0 ? ` (${filteredLive.length})` : ""}` },
-          { key: "applications", label: `Applications${apps.length > 0 ? ` (${apps.length})` : ""}` },
+          { key: "live", label: `Live Postings${liveRoles.length > 0 ? \` (\${filteredLive.length})\` : ""}` },
+          { key: "contract", label: `Contract Roles${contractRoles.length > 0 ? \` (\${filteredContract.length})\` : ""}` },
+          { key: "applications", label: `Applications${apps.length > 0 ? \` (\${apps.length})\` : ""}` },
           { key: "pipeline", label: "Pipeline" },
+          { key: "resumes", label: \`Resumes\${resumes.length > 0 ? \` (\${resumes.length})\` : ""}\` },
         ] as { key: typeof tab; label: string }[]).map(t => (
           <button key={t.key} className={`${styles.tab} ${tab === t.key ? styles.tabActive : ""}`} onClick={() => setTab(t.key)}>
             {t.label}
@@ -400,6 +488,165 @@ export default function TrackerPage() {
                       {(role.tags || []).map(t => <span key={t} className={styles.tag}>{t}</span>)}
                     </div>
                     <p className={styles.roleReason}>{role.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── CONTRACT TAB ── */}
+      {tab === "contract" && (
+        <div>
+          <div className={styles.tabHeader}>
+            <div>
+              <p className={styles.tabDesc}>Contract and C2C roles scored against your resume. Note: C2C on H-1B requires an LLC/S-Corp — consult an immigration attorney.</p>
+              {contractFetched && (() => {
+                const hoursAgo = Math.floor((Date.now() - new Date(contractFetched).getTime()) / 3600000);
+                const isStale = hoursAgo >= 6;
+                return (
+                  <div className={`${styles.refreshBanner} ${isStale ? styles.refreshBannerStale : styles.refreshBannerFresh}`}>
+                    {isStale ? `⚠ Last updated ${hoursAgo}h ago` : `✓ Updated ${hoursAgo === 0 ? "just now" : hoursAgo + "h ago"}`}
+                    {isStale && <button className={styles.refreshBannerBtn} onClick={() => fetchContract(true)}>Refresh now →</button>}
+                  </div>
+                );
+              })()}
+            </div>
+            <button className={styles.btnPrimary} onClick={() => fetchContract(true)} disabled={contractLoading}>
+              {contractLoading ? <><Spinner /> Loading...</> : <>↻ Refresh</>}
+            </button>
+          </div>
+
+          {contractRoles.length > 0 && (
+            <>
+              <div className={styles.toolbar}>
+                <input className={styles.searchInput} type="text" placeholder="Search contract roles..." value={contractSearch} onChange={e => setContractSearch(e.target.value)} />
+              </div>
+              <div className={styles.chipRow}>
+                {contractIndustries.map(ind => (
+                  <button key={ind} className={`${styles.chip} ${contractIndustry === ind ? styles.chipActive : ""}`} onClick={() => setContractIndustry(ind)}>{ind}</button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {contractError && <div className={styles.errorState}><span>⚠ {contractError}</span><button className={styles.btnGhost} onClick={() => fetchContract(true)}>Retry</button></div>}
+
+          {!contractLoading && !contractError && contractRoles.length === 0 && (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>📄</div>
+              <p className={styles.emptyTitle}>Find contract roles</p>
+              <p className={styles.emptyBody}>Contract and C2C roles from across the web, scored against your background.</p>
+              <button className={styles.btnPrimary} onClick={() => fetchContract()}>Load contract roles →</button>
+            </div>
+          )}
+
+          {contractLoading && (
+            <div className={styles.loadingState}>
+              <Spinner large />
+              <p>Fetching contract roles...</p>
+              <p className={styles.loadingSubtext}>This takes about 20 seconds</p>
+            </div>
+          )}
+
+          {!contractLoading && filteredContract.length > 0 && (
+            <div className={styles.roleList}>
+              {filteredContract.map(role => (
+                <div key={role.id} className={`${styles.roleCard} ${isTracked(role.id) ? styles.roleCardTracked : ""}`}>
+                  <ScoreBadge score={role.score} />
+                  <div className={styles.roleBody}>
+                    <div className={styles.roleTop}>
+                      <div>
+                        <div className={styles.roleTitle}>{role.title}</div>
+                        <div className={styles.roleMeta}>{role.company} · {role.location}</div>
+                      </div>
+                      <div className={styles.roleActions}>
+                        {role.contractType && <span className={styles.tagContract}>{role.contractType}</span>}
+                        {role.isKnownH1b ? <span className={styles.tagH1b}>✓ H-1B</span> : <span className={styles.tagVerify}>Verify H-1B</span>}
+                        {role.jobUrl && <a href={role.jobUrl} target="_blank" rel="noopener noreferrer" className={styles.btnGhost}>↗ Apply</a>}
+                        <button className={`${styles.trackBtn} ${isTracked(role.id) ? styles.trackBtnActive : ""}`} onClick={() => trackRole(role, "live")}>
+                          {isTracked(role.id) ? "✓ Tracked" : "+ Track"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.tagRow}>
+                      <span className={styles.tagInd}>{role.industry}</span>
+                      {(role.tags || []).map(t => <span key={t} className={styles.tag}>{t}</span>)}
+                    </div>
+                    <p className={styles.roleReason}>{role.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── RESUMES TAB ── */}
+      {tab === "resumes" && (
+        <div>
+          <div className={styles.tabHeader}>
+            <div>
+              <p className={styles.tabDesc}>Upload and manage your resumes. Switch between them to re-score job matches.</p>
+            </div>
+          </div>
+
+          {resumeError && <div className={styles.errorState}><span>⚠ {resumeError}</span></div>}
+
+          <div className={styles.resumeUploadBox}>
+            <p className={styles.resumeUploadTitle}>Upload a new resume</p>
+            <p className={styles.resumeUploadDesc}>PDF only. Give it a name like "SWE Resume" or "SRE Resume".</p>
+            <div className={styles.resumeUploadForm}>
+              <input
+                type="text"
+                id="resume-name"
+                placeholder='Resume name (e.g. "SWE Resume")'
+                className={styles.searchInput}
+                style={{ flex: 1 }}
+              />
+              <label className={styles.btnPrimary} style={{ cursor: "pointer" }}>
+                {resumeUploading ? <><Spinner /> Uploading...</> : <>📄 Choose PDF</>}
+                <input
+                  type="file"
+                  accept=".pdf"
+                  style={{ display: "none" }}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    const nameInput = document.getElementById("resume-name") as HTMLInputElement;
+                    const name = nameInput?.value || file?.name || "My Resume";
+                    if (file) await uploadResume(file, name);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          {resumes.length === 0 ? (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>📋</div>
+              <p className={styles.emptyTitle}>No resumes uploaded yet</p>
+              <p className={styles.emptyBody}>Upload your first resume above to get started.</p>
+            </div>
+          ) : (
+            <div className={styles.resumeList}>
+              {resumes.map(resume => (
+                <div key={resume.id} className={`${styles.resumeCard} ${activeResumeId === resume.id ? styles.resumeCardActive : ""}`}>
+                  <div className={styles.resumeCardLeft}>
+                    <div className={styles.resumeIcon}>📄</div>
+                    <div>
+                      <div className={styles.resumeName}>{resume.name}</div>
+                      <div className={styles.resumeMeta}>Uploaded {new Date(resume.uploadedAt).toLocaleDateString()} · {Math.round(resume.content.length / 1000)}k chars</div>
+                    </div>
+                  </div>
+                  <div className={styles.resumeCardActions}>
+                    {activeResumeId === resume.id ? (
+                      <span className={styles.resumeActiveBadge}>✓ Active</span>
+                    ) : (
+                      <button className={styles.btnGhost} onClick={() => setActiveResumeId(resume.id)}>Set active</button>
+                    )}
+                    <button className={styles.btnIconDanger} onClick={() => deleteResume(resume.id)} title="Delete">✕</button>
                   </div>
                 </div>
               ))}

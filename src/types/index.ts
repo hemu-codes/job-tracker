@@ -17,6 +17,7 @@ export interface Role {
   fetchedAt: string;
   isKnownH1b?: boolean;
   postedAt?: string;
+  contractType?: string;
 }
 
 export interface DiscoverRole {
