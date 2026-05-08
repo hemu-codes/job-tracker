@@ -2,7 +2,7 @@
 
 An AI-powered job search dashboard for software engineers on H-1B visas. Discovers roles in non-traditional industries, ranks them by resume match score, and tracks your full application pipeline.
 
-**Live:** https://hemu-job-tracker.vercel.app
+**Live:** [https://hemu-job-tracker.vercel.app](https://job-tracker-bs7i.vercel.app/tracker)
 
 ---
 
