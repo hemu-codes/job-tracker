@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useApps } from "@/lib/useApps";
 import { Role, TrackedApp, AppStatus, DiscoverCompany, DiscoverRole } from "@/types";
+import { getUserId } from "@/lib/userId";
 import styles from "./tracker.module.css";
 
 const STATUS_META: Record<AppStatus, { label: string; color: string }> = {
