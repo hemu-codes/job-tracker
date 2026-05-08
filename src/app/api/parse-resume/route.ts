@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+// @ts-expect-error - pdf-parse has no proper ESM types
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 export async function POST(request: Request) {
   try {
@@ -9,10 +11,7 @@ export async function POST(request: Request) {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    // Dynamically import pdf-parse to avoid build issues
-    const pdfParse = await import("pdf-parse");
-    const parsed = await pdfParse.default(buffer);
+    const parsed = await pdfParse(buffer);
 
     return NextResponse.json({ text: parsed.text, pages: parsed.numpages });
   } catch (err) {
