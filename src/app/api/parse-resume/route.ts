@@ -11,8 +11,8 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Dynamically import pdf-parse to avoid build issues
-    const pdfParse = (await import("pdf-parse")).default;
-    const parsed = await pdfParse(buffer);
+    const pdfParse = await import("pdf-parse");
+    const parsed = await pdfParse.default(buffer);
 
     return NextResponse.json({ text: parsed.text, pages: parsed.numpages });
   } catch (err) {
