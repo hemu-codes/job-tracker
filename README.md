@@ -1,122 +1,85 @@
-# Job Tracker
+# H-1B Job Tracker
 
-An AI-powered job search dashboard for software engineers on H-1B visas. Discovers roles in non-traditional industries, ranks them by resume match score, and tracks your full application pipeline.
+A personal job search dashboard for software engineers on H-1B visas. Discovers roles in non-traditional industries, scores them against your resume using AI, and tracks your full application pipeline with cross-device sync.
 
-**Live:** https://hemu-job-tracker.vercel.app
+**Live:** https://job-tracker-bs7i.vercel.app/tracker
 
 ---
 
 ## Features
 
-- **AI role discovery** — Claude AI generates a curated list of 20 H-1B-friendly roles every refresh, prioritizing non-traditional industries (HealthTech, FinTech, Aerospace, Logistics, Gaming, etc.)
-- **Resume match scoring** — each role is scored 60–95 based on how well it matches your actual skills and experience
-- **H-1B filter** — only includes established companies known to sponsor H-1B visas
-- **Application tracker** — track every application: status, date applied, job link, notes
-- **Pipeline view** — see your funnel at a glance: Saved → Applied → Interviewing → Offer
-- **Auto-refresh** — Vercel cron job refreshes roles every 6 hours automatically
+- **Discover Companies** — AI-researched company recommendations across 12 non-traditional industries (HealthTech, FinTech, Aerospace, Gaming, Logistics, and more), pre-vetted for H-1B sponsorship
+- **Live Postings** — Real job postings from LinkedIn, Indeed, and Glassdoor via JSearch API, scored against your resume
+- **Contract Roles** — Contract and C2C roles in a separate tab
+- **Resume match scoring** — Each role scored 60–95 based on match quality using Google Gemini AI
+- **H-1B filter** — 300+ verified H-1B sponsoring companies list with fuzzy matching
+- **Application tracker** — Track status, date applied, job link, and notes per role
+- **Pipeline view** — Saved → Applied → Interviewing → Offer → Rejected/Withdrawn
+- **Resume manager** — Upload multiple PDF resumes, set active resume for scoring
+- **Cross-device sync** — Applications and resumes stored in Upstash Redis
+- **Auto-refresh** — Vercel cron job refreshes daily (Hobby plan limit)
 
 ---
 
 ## Tech Stack
 
 - **Framework:** Next.js 15 (App Router) + TypeScript
-- **AI:** Anthropic Claude claude-sonnet-4-20250514 via `@anthropic-ai/sdk`
+- **AI:** Google Gemini 2.5 Flash Lite via `@google/generative-ai`
+- **Job Data:** JSearch API (via RapidAPI) — aggregates LinkedIn, Indeed, Glassdoor, ZipRecruiter
+- **Storage:** Upstash Redis (cross-device sync) + localStorage (cache)
+- **PDF Parsing:** unpdf
 - **Styling:** CSS Modules (dark theme)
 - **Deployment:** Vercel
-- **Cron:** Vercel Cron Jobs (every 6 hours)
-- **Storage:** localStorage (client-side application data)
+- **Cron:** Vercel Cron Jobs (daily)
+
+---
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GEMINI_API_KEY` | Google AI Studio API key |
+| `JSEARCH_API_KEY` | RapidAPI key for JSearch |
+| `KV_REST_API_URL` | Upstash Redis REST URL (auto-added by Vercel) |
+| `KV_REST_API_TOKEN` | Upstash Redis token (auto-added by Vercel) |
+| `CRON_SECRET` | Secret to protect the cron endpoint |
 
 ---
 
 ## Local Development
 
-### 1. Clone and install
-
 ```bash
 git clone https://github.com/hemu-codes/job-tracker.git
 cd job-tracker
 npm install
-```
-
-### 2. Set up environment variables
-
-```bash
 cp .env.example .env.local
-```
-
-Edit `.env.local`:
-```
-ANTHROPIC_API_KEY=sk-ant-...        # from console.anthropic.com
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-CRON_SECRET=any-random-string
-```
-
-### 3. Run locally
-
-```bash
+# Fill in your API keys in .env.local
 npm run dev
 ```
 
-Open http://localhost:3000 — you'll be redirected to `/tracker`.
-
----
-
-## Deploy to Vercel
-
-### 1. Push to GitHub
-
-```bash
-git init
-git add .
-git commit -m "feat: initial job tracker"
-git remote add origin https://github.com/hemu-codes/job-tracker.git
-git push -u origin main
-```
-
-### 2. Import to Vercel
-
-1. Go to [vercel.com/new](https://vercel.com/new)
-2. Import `hemu-codes/job-tracker`
-3. Add environment variables:
-   - `ANTHROPIC_API_KEY` → your Anthropic key
-   - `NEXT_PUBLIC_APP_URL` → `https://your-app.vercel.app` (fill in after first deploy)
-   - `CRON_SECRET` → any random string (e.g. run `openssl rand -hex 16`)
-4. Click **Deploy**
-
-### 3. Configure Vercel Cron
-
-The `vercel.json` already configures the cron schedule:
-```json
-{
-  "crons": [{ "path": "/api/cron/refresh-jobs", "schedule": "0 */6 * * *" }]
-}
-```
-
-This runs at `0:00, 6:00, 12:00, 18:00 UTC` daily. Vercel Hobby plans support 1 cron job for free. The cron endpoint is protected by `CRON_SECRET`.
+Open http://localhost:3000 — redirects to `/tracker`.
 
 ---
 
 ## API Routes
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `GET /api/jobs` | GET | Returns cached roles (6-hour TTL) |
-| `GET /api/jobs?force=true` | GET | Forces a fresh AI fetch |
-| `GET /api/cron/refresh-jobs` | GET | Called by Vercel cron; triggers force refresh |
+| Route | Description |
+|-------|-------------|
+| `GET /api/discover-jobs` | AI-generated company + role recommendations |
+| `GET /api/live-jobs` | Real postings from JSearch, scored by Gemini |
+| `GET /api/contract-jobs` | Contract/C2C roles from JSearch |
+| `GET /api/apps` | Read/write tracked applications (Redis) |
+| `GET /api/resumes` | Read/write uploaded resumes (Redis) |
+| `POST /api/parse-resume` | Extract text from uploaded PDF |
+| `GET /api/cron/refresh-jobs` | Called by Vercel cron daily |
 
 ---
 
-## Portfolio Integration
+## Updating Resume / Scoring
 
-See `PORTFOLIO_INTEGRATION.ts` for a ready-to-paste project card for your portfolio at https://hemantha-personal-website.vercel.app.
+Edit `src/lib/resume.ts` to update `RESUME_CONTEXT` with your skills and experience. All AI scoring uses this context.
 
----
-
-## Updating the Resume / Scoring Prompt
-
-Edit `src/lib/resume.ts`:
-- `RESUME_CONTEXT` — your skills, experience, and preferences
-- `buildJobsPrompt()` — the full prompt sent to Claude. Adjust industry weights, score criteria, or role types here.
+Edit `src/lib/h1b-sponsors.ts` to add or remove companies from the H-1B sponsors list.
 
 ---
 
