@@ -2,7 +2,11 @@
 
 A personal job search dashboard for software engineers on H-1B visas. Discovers roles in non-traditional industries, scores them against your resume using AI, and tracks your full application pipeline with cross-device sync.
 
+<<<<<<< HEAD
 **Live:** https://job-tracker-bs7i.vercel.app/tracker
+=======
+**Live:** [https://job-tracker-bs7i.vercel.app/tracker](https://job-tracker-bs7i.vercel.app/tracker)
+>>>>>>> 2968618e1dbaaad66909b238cfd39f6959634f35
 
 ---
 
